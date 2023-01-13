@@ -1,0 +1,66 @@
+---
+- name: ZPA Connector Provisioning Maintainence
+  hosts: zpa_connectors
+  become: true
+  
+  tasks:
+  - name: Run a Yum Update
+    command: yum update -y  
+
+  - name: Checking if ZPA Provisioning Key Exists in Directory
+    stat:
+      path: /opt/zscaler/var/provision_key
+    register: zpa_key
+
+  - name: Stop ZPA Connector Software
+    command: systemctl stop zpa-connector
+    when: not zpa_key.stat.exists
+
+  - name: Pause before creating key
+    pause:
+      seconds: 15
+
+  - name: Create ZPA Connector Provisioning Key File
+    copy:
+      content: {add_app_connector_provisioning_key_here}
+      dest: /opt/zscaler/var/provision_key
+      mode: 0644
+    
+  - name: Checking if ZPA Provisioning Key Exists in Directory Before Restarting Connector
+    stat:
+      path: /opt/zscaler/var/provision_key
+    register: zpa_key_new_prov
+
+  - name: Report if Key was Not Found
+    debug:
+      msg: The ZPA Provisioning Key was not found. Please run playbook again... Skipping...
+    when: not zpa_key_new_prov.stat.exists
+
+  - name: Report if Key was Found
+    debug:
+      msg: The ZPA Provisioning Key was found. Proceeding with Playbook!
+    when: zpa_key_new_prov.stat.exists
+
+  - name: Start ZPA Connector Software
+    command: systemctl start zpa-connector
+    
+  - name: Pause before restarting daemon  
+    pause:
+      seconds: 30
+
+  - name: Restart System Daemon
+    command: systemctl daemon-reload
+    
+  - name: Pause before starting connector again  
+    pause:
+      seconds: 30
+
+  - name: Start ZPA Connector Software Again
+    command: systemctl start zpa-connector
+    
+  - name: Change Hostname of Connector to Signify it's Finished
+    command: hostname {hostname}
+
+  - name: Connector Provisioning Status
+    debug:
+      msg: Ansible has successfully provisioned this connector. Please test and verify connector status on https://admin.private.zscaler.com.
